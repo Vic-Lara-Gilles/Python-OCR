@@ -36,7 +36,7 @@ with st.sidebar:
         """
         - **Docker** - Contenedorizacion
         - **Streamlit** - Interfaz web
-        - **PaddleOCR** - Motor OCR
+        - **Tesseract-OCR** - Motor OCR
         - **Python 3.11** - Runtime
         - **OpenCV** - Procesamiento de imagenes
         """
@@ -44,7 +44,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### Formatos Soportados")
-    st.markdown("JPG, JPEG, PNG, WEBP")
+    st.markdown("**Imagenes:** JPG, JPEG, PNG, WEBP")
+    st.markdown("**Documentos:** PDF")
 
 # Main content
 tab1, tab2 = st.tabs(["Procesar", "Resultados"])
@@ -54,11 +55,11 @@ with tab1:
 
     # Task 1: Extract Text
     if task == "Extraer Texto":
-        st.subheader("Extraer Texto de Imagen")
+        st.subheader("Extraer Texto de Imagen o PDF")
 
         uploaded_file = st.file_uploader(
-            "Sube una imagen",
-            type=["jpg", "jpeg", "png", "webp"],
+            "Sube una imagen o PDF",
+            type=["jpg", "jpeg", "png", "webp", "pdf"],
             key="extract_text",
         )
 
@@ -66,11 +67,15 @@ with tab1:
             col1, col2 = st.columns(2)
 
             with col1:
-                st.image(
-                    uploaded_file,
-                    caption="Imagen Original",
-                    use_container_width=True,
-                )
+                if uploaded_file.name.lower().endswith(".pdf"):
+                    st.info(f"Archivo PDF: {uploaded_file.name}")
+                    st.markdown("**Tipo:** PDF")
+                else:
+                    st.image(
+                        uploaded_file,
+                        caption="Imagen Original",
+                        use_container_width=True,
+                    )
 
             with col2:
                 if st.button("Extraer Texto", type="primary", use_container_width=True):
@@ -83,8 +88,11 @@ with tab1:
                             f.write(uploaded_file.getbuffer())
 
                         try:
-                            # Extract text and boxes
-                            result = OCREngine.extract_text_and_boxes(temp_path)
+                            # Extract text and boxes (handle PDF or image)
+                            if uploaded_file.name.lower().endswith(".pdf"):
+                                result = OCREngine.extract_text_from_pdf(temp_path)
+                            else:
+                                result = OCREngine.extract_text_and_boxes(temp_path)
 
                             # Generate markdown and plain text
                             markdown_text = OCREngine.generate_markdown(result)
@@ -164,8 +172,8 @@ with tab1:
         st.subheader("Visualizar Cajas Delimitadoras")
 
         uploaded_file = st.file_uploader(
-            "Sube una imagen",
-            type=["jpg", "jpeg", "png", "webp"],
+            "Sube una imagen o PDF",
+            type=["jpg", "jpeg", "png", "webp", "pdf"],
             key="visualize_boxes",
         )
 
@@ -223,11 +231,11 @@ with tab1:
 
     # Task 3: Multiple Images
     elif task == "Multiples Imagenes":
-        st.subheader("Procesar Multiples Imagenes")
+        st.subheader("Procesar Multiples Imagenes o PDFs")
 
         uploaded_files = st.file_uploader(
-            "Sube multiples imagenes",
-            type=["jpg", "jpeg", "png", "webp"],
+            "Sube multiples imagenes o PDFs",
+            type=["jpg", "jpeg", "png", "webp", "pdf"],
             accept_multiple_files=True,
             key="multiple_images",
         )
@@ -249,13 +257,17 @@ with tab1:
                         f.write(uploaded_file.getbuffer())
 
                     try:
-                        # Extract text and boxes
-                        result = OCREngine.extract_text_and_boxes(temp_path)
+                        # Extract text and boxes (handle PDF or image)
+                        if uploaded_file.name.lower().endswith(".pdf"):
+                            result = OCREngine.extract_text_from_pdf(temp_path)
+                        else:
+                            result = OCREngine.extract_text_and_boxes(temp_path)
 
                         results.append(
                             {
                                 "Filename": uploaded_file.name,
                                 "Lines": result["total_lines"],
+                                "Pages": result.get("total_pages", 1),
                                 "Text": (
                                     result["full_text"][:100] + "..."
                                     if len(result["full_text"]) > 100
@@ -293,6 +305,7 @@ with tab1:
                             {
                                 "Filename": uploaded_file.name,
                                 "Lines": 0,
+                                "Pages": 0,
                                 "Text": f"Error: {str(e)}",
                             }
                         )
