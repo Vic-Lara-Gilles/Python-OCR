@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for OpenCV and PaddleOCR
+# Install system dependencies for OpenCV and Tesseract-OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     curl \
     libffi-dev \
+    tesseract-ocr \
+    tesseract-ocr-spa \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
