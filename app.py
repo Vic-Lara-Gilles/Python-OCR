@@ -46,7 +46,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### Formatos Soportados")
-    st.markdown("JPG, JPEG, PNG, WEBP")
+    st.markdown("**Imagenes:** JPG, JPEG, PNG, WEBP")
+    st.markdown("**Documentos:** PDF")
 
 # Main content
 tab1, tab2 = st.tabs(["Procesar", "Resultados"])
@@ -56,19 +57,28 @@ with tab1:
 
     # Task 1: Extract Text
     if task == "Extraer Texto":
-        st.subheader("Extraer Texto de Imagen")
+        st.subheader("Extraer Texto de Imagen o PDF")
 
         uploaded_file = st.file_uploader(
-            "Sube una imagen", type=["jpg", "jpeg", "png", "webp"], key="extract_text"
+            "Sube una imagen o PDF",
+            type=["jpg", "jpeg", "png", "webp", "pdf"],
+            key="extract_text",
         )
 
         if uploaded_file:
             col1, col2 = st.columns(2)
 
             with col1:
-                st.image(
-                    uploaded_file, caption="Imagen Original", use_container_width=True
-                )
+                # Only show image preview for non-PDF files
+                if uploaded_file.name.lower().endswith(".pdf"):
+                    st.info(f"Archivo PDF: {uploaded_file.name}")
+                    st.markdown(f"**Tipo:** PDF")
+                else:
+                    st.image(
+                        uploaded_file,
+                        caption="Imagen Original",
+                        use_container_width=True,
+                    )
 
             with col2:
                 if st.button("Extraer Texto", type="primary", use_container_width=True):
@@ -84,22 +94,66 @@ with tab1:
                             # Extract text and boxes
                             result = OCREngine.extract_text_and_boxes(temp_path)
 
-                            # Display JSON result
-                            st.json(result)
+                            # Generate markdown and plain text
+                            markdown_text = OCREngine.generate_markdown(result)
+                            plain_text = OCREngine.generate_plain_text(result)
 
-                            # Save result to file
-                            output_filename = f"ocr_{uploaded_file.name}.json"
-                            output_path = OUTPUT_DIR / output_filename
-                            with open(output_path, "w", encoding="utf-8") as f:
+                            # Display extracted text
+                            st.markdown("### Texto Extraído")
+                            st.text_area("Contenido", plain_text, height=300)
+
+                            # Save results to files
+                            base_name = os.path.splitext(uploaded_file.name)[0]
+
+                            # Save JSON
+                            json_filename = f"ocr_{base_name}.json"
+                            json_path = OUTPUT_DIR / json_filename
+                            with open(json_path, "w", encoding="utf-8") as f:
                                 json.dump(result, f, ensure_ascii=False, indent=2)
 
-                            # Download button
-                            st.download_button(
-                                label="Descargar JSON",
-                                data=json.dumps(result, ensure_ascii=False, indent=2),
-                                file_name=output_filename,
-                                mime="application/json",
-                            )
+                            # Save Markdown
+                            md_filename = f"ocr_{base_name}.md"
+                            md_path = OUTPUT_DIR / md_filename
+                            with open(md_path, "w", encoding="utf-8") as f:
+                                f.write(markdown_text)
+
+                            # Save Plain Text
+                            txt_filename = f"ocr_{base_name}.txt"
+                            txt_path = OUTPUT_DIR / txt_filename
+                            with open(txt_path, "w", encoding="utf-8") as f:
+                                f.write(plain_text)
+
+                            # Download buttons
+                            col_a, col_b, col_c = st.columns(3)
+
+                            with col_a:
+                                st.download_button(
+                                    label="📄 Descargar TXT",
+                                    data=plain_text,
+                                    file_name=txt_filename,
+                                    mime="text/plain",
+                                    use_container_width=True,
+                                )
+
+                            with col_b:
+                                st.download_button(
+                                    label="📝 Descargar Markdown",
+                                    data=markdown_text,
+                                    file_name=md_filename,
+                                    mime="text/markdown",
+                                    use_container_width=True,
+                                )
+
+                            with col_c:
+                                st.download_button(
+                                    label="📊 Descargar JSON",
+                                    data=json.dumps(
+                                        result, ensure_ascii=False, indent=2
+                                    ),
+                                    file_name=json_filename,
+                                    mime="application/json",
+                                    use_container_width=True,
+                                )
 
                             st.success(
                                 f"Texto extraído correctamente. {result['total_lines']} líneas detectadas."
@@ -118,8 +172,8 @@ with tab1:
         st.subheader("Visualizar Cajas Delimitadoras")
 
         uploaded_file = st.file_uploader(
-            "Sube una imagen",
-            type=["jpg", "jpeg", "png", "webp"],
+            "Sube una imagen o PDF",
+            type=["jpg", "jpeg", "png", "webp", "pdf"],
             key="visualize_boxes",
         )
 
@@ -177,11 +231,11 @@ with tab1:
 
     # Task 3: Multiple Images
     elif task == "Múltiples Imágenes":
-        st.subheader("Procesar Múltiples Imágenes")
+        st.subheader("Procesar Múltiples Imágenes o PDFs")
 
         uploaded_files = st.file_uploader(
-            "Sube múltiples imágenes",
-            type=["jpg", "jpeg", "png", "webp"],
+            "Sube múltiples imágenes o PDFs",
+            type=["jpg", "jpeg", "png", "webp", "pdf"],
             accept_multiple_files=True,
             key="multiple_images",
         )
@@ -203,13 +257,17 @@ with tab1:
                         f.write(uploaded_file.getbuffer())
 
                     try:
-                        # Extract text and boxes
-                        result = OCREngine.extract_text_and_boxes(temp_path)
+                        # Extract text and boxes (handle PDF or image)
+                        if uploaded_file.name.lower().endswith(".pdf"):
+                            result = OCREngine.extract_text_from_pdf(temp_path)
+                        else:
+                            result = OCREngine.extract_text_and_boxes(temp_path)
 
                         results.append(
                             {
                                 "Filename": uploaded_file.name,
                                 "Lines": result["total_lines"],
+                                "Pages": result.get("total_pages", 1),
                                 "Text": (
                                     result["full_text"][:100] + "..."
                                     if len(result["full_text"]) > 100
@@ -219,10 +277,27 @@ with tab1:
                         )
 
                         # Save individual result
-                        output_filename = f"ocr_{uploaded_file.name}.json"
-                        output_path = OUTPUT_DIR / output_filename
-                        with open(output_path, "w", encoding="utf-8") as f:
+                        base_name = os.path.splitext(uploaded_file.name)[0]
+
+                        # Save JSON
+                        json_filename = f"ocr_{base_name}.json"
+                        json_path = OUTPUT_DIR / json_filename
+                        with open(json_path, "w", encoding="utf-8") as f:
                             json.dump(result, f, ensure_ascii=False, indent=2)
+
+                        # Save Markdown
+                        markdown_text = OCREngine.generate_markdown(result)
+                        md_filename = f"ocr_{base_name}.md"
+                        md_path = OUTPUT_DIR / md_filename
+                        with open(md_path, "w", encoding="utf-8") as f:
+                            f.write(markdown_text)
+
+                        # Save Plain Text
+                        plain_text = OCREngine.generate_plain_text(result)
+                        txt_filename = f"ocr_{base_name}.txt"
+                        txt_path = OUTPUT_DIR / txt_filename
+                        with open(txt_path, "w", encoding="utf-8") as f:
+                            f.write(plain_text)
 
                     except Exception as e:
                         st.warning(f"Error procesando {uploaded_file.name}: {str(e)}")
@@ -230,6 +305,7 @@ with tab1:
                             {
                                 "Filename": uploaded_file.name,
                                 "Lines": 0,
+                                "Pages": 0,
                                 "Text": f"Error: {str(e)}",
                             }
                         )
