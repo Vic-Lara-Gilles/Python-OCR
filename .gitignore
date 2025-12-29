@@ -147,3 +147,13 @@ inference/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml

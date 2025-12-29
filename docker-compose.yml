@@ -9,6 +9,8 @@ services:
     volumes:
       - ./outputs:/app/outputs
       - ./uploads:/app/uploads
+      - ./src:/app/src
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/src
     restart: unless-stopped
