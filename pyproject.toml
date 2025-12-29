@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "python-ocr"
 version = "1.0.0"
-description = "Fast OCR system for document recognition with table support using PaddleOCR"
+description = "Fast OCR system for document recognition with PDF support (Tesseract/PaddleOCR)"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 authors = [
     { name = "Developer" }
 ]
-keywords = ["ocr", "paddleocr", "document-recognition", "streamlit", "docker"]
+keywords = ["ocr", "tesseract", "paddleocr", "document-recognition", "streamlit", "docker"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -25,16 +25,19 @@ classifiers = [
 
 dependencies = [
     "streamlit==1.39.0",
-    "paddleocr[doc-parser]==2.8.1",
     "pillow==10.4.0",
-    "opencv-python==4.10.1.26",
+    "opencv-python-headless>=4.8.0",
     "numpy==1.26.4",
     "pandas==2.2.3",
-    "torch==2.3.1",
-    "torchvision==0.18.1",
+    "PyMuPDF>=1.23.0",
+    "pytesseract>=0.3.10",
 ]
 
 [project.optional-dependencies]
+paddle = [
+    "paddlepaddle>=2.6.0",
+    "paddleocr>=2.7.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
