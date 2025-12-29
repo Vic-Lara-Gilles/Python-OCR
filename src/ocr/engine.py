@@ -1,14 +1,11 @@
 """OCR Engine module for text extraction and visualization using PaddleOCR."""
 
 import os
-import tempfile
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 import streamlit as st
 from paddleocr import PaddleOCR
-from PIL import Image, ImageDraw, ImageFont
 import cv2
 import numpy as np
-import fitz
 
 
 class OCREngine:
@@ -26,37 +23,9 @@ class OCREngine:
         return PaddleOCR(
             use_angle_cls=True,
             lang="es",
-            use_gpu=False,
-            show_log=False,
-            det_db_thresh=0.3,
-            det_db_box_thresh=0.5,
-            rec_batch_num=6,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
         )
-
-    @staticmethod
-    def pdf_to_images(pdf_path: str) -> List[str]:
-        """
-        Convert PDF pages to images.
-
-        Args:
-            pdf_path: Path to the input PDF file.
-
-        Returns:
-            List of paths to temporary image files.
-        """
-        doc = fitz.open(pdf_path)
-        image_paths = []
-
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            pix.save(temp_file.name)
-            image_paths.append(temp_file.name)
-
-        doc.close()
-        return image_paths
 
     @staticmethod
     def extract_text_and_boxes(image_path: str) -> Dict[str, Any]:
@@ -139,43 +108,6 @@ class OCREngine:
             Plain text string.
         """
         return result["full_text"]
-
-    @staticmethod
-    def extract_text_from_pdf(pdf_path: str) -> Dict[str, Any]:
-        """
-        Extract text from all pages of a PDF.
-
-        Args:
-            pdf_path: Path to the input PDF file.
-
-        Returns:
-            Dictionary containing combined results from all pages.
-        """
-        image_paths = OCREngine.pdf_to_images(pdf_path)
-        all_boxes = []
-        all_text_parts = []
-
-        for idx, img_path in enumerate(image_paths):
-            result = OCREngine.extract_text_and_boxes(img_path)
-
-            # Add page number to each box
-            for box in result["boxes"]:
-                box["page"] = idx + 1
-                all_boxes.append(box)
-
-            if result["full_text"]:
-                all_text_parts.append(f"[Page {idx + 1}] {result['full_text']}")
-
-            # Clean up temp image
-            os.remove(img_path)
-
-        return {
-            "file": os.path.basename(pdf_path),
-            "full_text": "\n\n".join(all_text_parts),
-            "boxes": all_boxes,
-            "total_lines": len(all_boxes),
-            "total_pages": len(image_paths),
-        }
 
     @staticmethod
     def visualize_boxes(image_path: str, output_path: str) -> str:

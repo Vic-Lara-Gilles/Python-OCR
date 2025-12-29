@@ -3,11 +3,9 @@
 import os
 import json
 from pathlib import Path
-from typing import List
 import streamlit as st
 import pandas as pd
-from PIL import Image
-from ocr_engine import OCREngine
+from ocr.engine import OCREngine
 
 
 # Page configuration
@@ -28,26 +26,25 @@ with st.sidebar:
 
     task = st.radio(
         "Selecciona una tarea:",
-        ["Extraer Texto", "Visualizar Cajas", "Múltiples Imágenes"],
+        ["Extraer Texto", "Visualizar Cajas", "Multiples Imagenes"],
         help="Elige el tipo de procesamiento OCR que deseas realizar",
     )
 
     st.markdown("---")
-    st.markdown("### Stack Tecnológico")
+    st.markdown("### Stack Tecnologico")
     st.markdown(
         """
-        - **Docker** - Contenedorización
+        - **Docker** - Contenedorizacion
         - **Streamlit** - Interfaz web
         - **PaddleOCR** - Motor OCR
         - **Python 3.11** - Runtime
-        - **OpenCV** - Procesamiento de imágenes
+        - **OpenCV** - Procesamiento de imagenes
         """
     )
 
     st.markdown("---")
     st.markdown("### Formatos Soportados")
-    st.markdown("**Imagenes:** JPG, JPEG, PNG, WEBP")
-    st.markdown("**Documentos:** PDF")
+    st.markdown("JPG, JPEG, PNG, WEBP")
 
 # Main content
 tab1, tab2 = st.tabs(["Procesar", "Resultados"])
@@ -57,11 +54,11 @@ with tab1:
 
     # Task 1: Extract Text
     if task == "Extraer Texto":
-        st.subheader("Extraer Texto de Imagen o PDF")
+        st.subheader("Extraer Texto de Imagen")
 
         uploaded_file = st.file_uploader(
-            "Sube una imagen o PDF",
-            type=["jpg", "jpeg", "png", "webp", "pdf"],
+            "Sube una imagen",
+            type=["jpg", "jpeg", "png", "webp"],
             key="extract_text",
         )
 
@@ -69,16 +66,11 @@ with tab1:
             col1, col2 = st.columns(2)
 
             with col1:
-                # Only show image preview for non-PDF files
-                if uploaded_file.name.lower().endswith(".pdf"):
-                    st.info(f"Archivo PDF: {uploaded_file.name}")
-                    st.markdown(f"**Tipo:** PDF")
-                else:
-                    st.image(
-                        uploaded_file,
-                        caption="Imagen Original",
-                        use_container_width=True,
-                    )
+                st.image(
+                    uploaded_file,
+                    caption="Imagen Original",
+                    use_container_width=True,
+                )
 
             with col2:
                 if st.button("Extraer Texto", type="primary", use_container_width=True):
@@ -99,7 +91,7 @@ with tab1:
                             plain_text = OCREngine.generate_plain_text(result)
 
                             # Display extracted text
-                            st.markdown("### Texto Extraído")
+                            st.markdown("### Texto Extraido")
                             st.text_area("Contenido", plain_text, height=300)
 
                             # Save results to files
@@ -128,7 +120,7 @@ with tab1:
 
                             with col_a:
                                 st.download_button(
-                                    label="📄 Descargar TXT",
+                                    label="Descargar TXT",
                                     data=plain_text,
                                     file_name=txt_filename,
                                     mime="text/plain",
@@ -137,7 +129,7 @@ with tab1:
 
                             with col_b:
                                 st.download_button(
-                                    label="📝 Descargar Markdown",
+                                    label="Descargar Markdown",
                                     data=markdown_text,
                                     file_name=md_filename,
                                     mime="text/markdown",
@@ -146,7 +138,7 @@ with tab1:
 
                             with col_c:
                                 st.download_button(
-                                    label="📊 Descargar JSON",
+                                    label="Descargar JSON",
                                     data=json.dumps(
                                         result, ensure_ascii=False, indent=2
                                     ),
@@ -156,7 +148,7 @@ with tab1:
                                 )
 
                             st.success(
-                                f"Texto extraído correctamente. {result['total_lines']} líneas detectadas."
+                                f"Texto extraido correctamente. {result['total_lines']} lineas detectadas."
                             )
 
                         except Exception as e:
@@ -172,8 +164,8 @@ with tab1:
         st.subheader("Visualizar Cajas Delimitadoras")
 
         uploaded_file = st.file_uploader(
-            "Sube una imagen o PDF",
-            type=["jpg", "jpeg", "png", "webp", "pdf"],
+            "Sube una imagen",
+            type=["jpg", "jpeg", "png", "webp"],
             key="visualize_boxes",
         )
 
@@ -230,12 +222,12 @@ with tab1:
                             os.remove(temp_path)
 
     # Task 3: Multiple Images
-    elif task == "Múltiples Imágenes":
-        st.subheader("Procesar Múltiples Imágenes o PDFs")
+    elif task == "Multiples Imagenes":
+        st.subheader("Procesar Multiples Imagenes")
 
         uploaded_files = st.file_uploader(
-            "Sube múltiples imágenes o PDFs",
-            type=["jpg", "jpeg", "png", "webp", "pdf"],
+            "Sube multiples imagenes",
+            type=["jpg", "jpeg", "png", "webp"],
             accept_multiple_files=True,
             key="multiple_images",
         )
@@ -257,17 +249,13 @@ with tab1:
                         f.write(uploaded_file.getbuffer())
 
                     try:
-                        # Extract text and boxes (handle PDF or image)
-                        if uploaded_file.name.lower().endswith(".pdf"):
-                            result = OCREngine.extract_text_from_pdf(temp_path)
-                        else:
-                            result = OCREngine.extract_text_and_boxes(temp_path)
+                        # Extract text and boxes
+                        result = OCREngine.extract_text_and_boxes(temp_path)
 
                         results.append(
                             {
                                 "Filename": uploaded_file.name,
                                 "Lines": result["total_lines"],
-                                "Pages": result.get("total_pages", 1),
                                 "Text": (
                                     result["full_text"][:100] + "..."
                                     if len(result["full_text"]) > 100
@@ -305,7 +293,6 @@ with tab1:
                             {
                                 "Filename": uploaded_file.name,
                                 "Lines": 0,
-                                "Pages": 0,
                                 "Text": f"Error: {str(e)}",
                             }
                         )
@@ -333,13 +320,13 @@ with tab1:
                     mime="text/csv",
                 )
 
-                st.success(f"Procesadas {len(uploaded_files)} imágenes correctamente.")
+                st.success(f"Procesadas {len(uploaded_files)} imagenes correctamente.")
 
 with tab2:
     st.header("Resultados Guardados")
 
     if not any(OUTPUT_DIR.iterdir()):
-        st.info("No hay resultados guardados aún. Procesa algunas imágenes primero.")
+        st.info("No hay resultados guardados aun. Procesa algunas imagenes primero.")
     else:
         # List all files in outputs directory
         files = sorted(
