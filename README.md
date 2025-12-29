@@ -1,13 +1,11 @@
 # Python-OCR
 
-Sistema OCR rapido para reconocimiento de documentos con soporte para tablas.
+Sistema OCR para documentos y PDFs - **100% dockerizado, cero instalaciones locales**.
 
-## Stack Tecnologico
+## Requisitos
 
-- **Docker** - Contenedorizacion completa
-- **Streamlit** - Interfaz web interactiva
-- **PaddleOCR-VL** - Modelo vision-lenguaje para OCR
-- **Python 3.11** - Runtime
+- Docker Desktop instalado
+- Nada más
 
 ## Estructura del Proyecto
 
@@ -33,39 +31,40 @@ python-ocr/
 └── README.md
 ```
 
-## Inicio Rapido
-
-### Con Docker (Recomendado)
+## Inicio Rápido
 
 ```bash
-# Construir y ejecutar
+# Iniciar aplicación
+docker-compose up --build
+```
+
+Abre http://localhost:8501
+
+**El contenedor incluye TODO:**
+- Python 3.11
+- Tesseract-OCR + idioma español
+- PyMuPDF para PDFs
+- Todas las dependencias
+- Streamlit configurado
+
+## Comandos Docker
+
+```bash
+# Iniciar (primer plano)
 docker-compose up --build
 
-# En segundo plano
+# Iniciar (segundo plano)
 docker-compose up -d --build
+
+# Detener
+docker-compose down
+
+# Ver logs
+docker-compose logs -f
+
+# Reconstruir limpio
+docker-compose down && docker-compose build --no-cache && docker-compose up
 ```
-
-Luego abre: http://localhost:8501
-
-### Sin Docker (Desarrollo Local)
-
-```bash
-# Crear entorno virtual
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Instalar paquete en modo desarrollo
-pip install -e .
-
-# Ejecutar aplicacion
-cd src && streamlit run ocr/app.py
-```
-
-## Caracteristicas
 
 ### 1. Extraccion de Texto
 - Sube una imagen y extrae todo el texto detectado
@@ -84,54 +83,71 @@ cd src && streamlit run ocr/app.py
 
 ## Formatos Soportados
 
-| Formato | Extension |
-|---------|-----------|
-| JPEG    | .jpg, .jpeg |
-| PNG     | .png |
-| WebP    | .webp |
+| Formato | Extensión | Notas |
+|---------|-----------|-------|
+| JPEG    | .jpg, .jpeg | Imágenes estándar |
+| PNG     | .png | Transparencia soportada |
+| WebP    | .webp | Formato moderno |
+| PDF     | .pdf | Multi-página con PyMuPDF |
+
+## Stack Tecnológico
+
+### Docker
+- Imagen base: `python:3.11-slim`
+- Sistema: Tesseract-OCR + español
+- Puerto: 8501
+- Volúmenes: outputs, uploads, src (hot reload)
+
+### Python
+- **Streamlit 1.39.0** - Interfaz web
+- **pytesseract** - Wrapper Python para Tesseract
+- **PyMuPDF** - Procesamiento PDFs
+- **OpenCV-headless** - Procesamiento imágenes
+- **Pillow** - Manipulación imágenes
+
+### OCR
+- **Motor:** Tesseract 5.x
+- **Idioma:** Español (spa)
+- **Método:** `pytesseract.image_to_data()`
+- **Output:** Texto + coordenadas + confianza
 
 ## Desarrollo
 
-### Instalacion de Dependencias de Desarrollo
+### Modificar Código
+
+El directorio `src/` está montado como volumen. Los cambios se reflejan automáticamente:
 
 ```bash
-pip install -r requirements-dev.txt
+# Editar código
+nano src/ocr/engine.py
+
+# Streamlit detecta cambios y recarga
 ```
 
 ### Ejecutar Tests
 
 ```bash
-# Ejecutar todos los tests
-pytest
-
-# Con cobertura
-pytest --cov=src/ocr --cov-report=html
-
-# Tests especificos
-pytest tests/test_engine.py -v
+# Dentro del contenedor
+docker-compose exec ocr-app pytest
 ```
 
-### Formateo de Codigo
+### Ver Logs
 
 ```bash
-# Formatear con black
-black src/ tests/
+# Logs en tiempo real
+docker-compose logs -f
 
-# Verificar con ruff
-ruff check src/ tests/
-
-# Type checking con mypy
-mypy src/
+# Últimas 100 líneas
+docker-compose logs --tail=100
 ```
 
-### Pre-commit Hooks
+### Reconstruir Imagen
 
 ```bash
-# Instalar hooks
-pre-commit install
-
-# Ejecutar manualmente
-pre-commit run --all-files
+# Si cambias requirements.txt o Dockerfile
+docker-compose down
+docker-compose build --no-cache
+docker-compose up
 ```
 
 ## API del Motor OCR
@@ -160,64 +176,68 @@ plain_text = OCREngine.generate_plain_text(result)
 OCREngine.visualize_boxes("imagen.jpg", "output.png")
 ```
 
-## Configuracion Docker
+## Configuración Docker
+
+### Volúmenes
+
+```yaml
+volumes:
+  - ./outputs:/app/outputs    # Resultados persistentes
+  - ./uploads:/app/uploads    # Archivos temporales
+  - ./src:/app/src            # Hot reload código
+```
+
+Los resultados OCR se guardan en `./outputs/` y persisten tras detener el contenedor.
 
 ### Variables de Entorno
 
-| Variable | Descripcion | Default |
-|----------|-------------|---------|
-| PYTHONUNBUFFERED | Salida sin buffer | 1 |
-| STREAMLIT_SERVER_PORT | Puerto del servidor | 8501 |
-
-### Volumenes
-
-| Host | Container | Descripcion |
-|------|-----------|-------------|
-| ./outputs | /app/outputs | Resultados OCR |
-| ./uploads | /app/uploads | Archivos temporales |
-
-## Solucion de Problemas
-
-### El contenedor no inicia
-
-```bash
-# Ver logs
-docker-compose logs -f
-
-# Reconstruir imagen
-docker-compose build --no-cache
+```yaml
+environment:
+  - PYTHONUNBUFFERED=1      # Logs en tiempo real
+  - PYTHONPATH=/app/src     # Import path
 ```
 
-### Errores de memoria con imagenes grandes
+## Troubleshooting
 
-El modelo PaddleOCR requiere memoria significativa. Para imagenes muy grandes:
-- Redimensiona la imagen antes de procesar
-- Aumenta la memoria del contenedor Docker
+### Puerto 8501 ocupado
 
-### Modelos no se descargan
+```bash
+# Cambiar puerto en docker-compose.yml
+ports:
+  - "8502:8501"  # Usa 8502 en host
+```
 
-Los modelos de PaddleOCR se descargan automaticamente en el primer uso.
-Verifica tu conexion a internet.
+### Contenedor no inicia
+
+```bash
+# Ver logs detallados
+docker-compose logs ocr-app
+
+# Limpiar y reconstruir
+docker-compose down
+docker system prune -a
+docker-compose up --build
+```
+
+### Archivos no se guardan
+
+```bash
+# Verificar permisos
+ls -la outputs/
+chmod 777 outputs/ uploads/
+```
+
+### Error de dependencias
+
+```bash
+# Reconstruir sin caché
+docker-compose build --no-cache
+```
 
 ## Licencia
 
 Este proyecto esta bajo la Licencia MIT. Ver [LICENSE](LICENSE) para mas detalles.
 
-## Contribuir
+---
 
-1. Fork el repositorio
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -m 'feat: add nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
-
-### Guia de Commits
-
-Este proyecto usa [Conventional Commits](https://www.conventionalcommits.org/):
-
-- `feat:` Nueva funcionalidad
-- `fix:` Correccion de bugs
-- `docs:` Solo documentacion
-- `refactor:` Reestructuracion de codigo
-- `test:` Agregar o modificar tests
-- `chore:` Tareas de mantenimiento
+**Desarrollo local sin Docker:** Para casos especiales (testing, debugging), ver [docs/MACOS_SETUP.md](docs/MACOS_SETUP.md)
