@@ -216,7 +216,7 @@ func main() {
     }))
 
     // Static files
-    r.Handle("/static/*", http.StripPrefix("/static/", 
+    r.Handle("/static/*", http.StripPrefix("/static/",
         http.FileServer(http.Dir("web/static"))))
 
     // Routes
@@ -285,10 +285,10 @@ import (
 type Engine interface {
     // ExtractText extracts text from an image
     ExtractText(ctx context.Context, img image.Image) (*Result, error)
-    
+
     // ExtractTextWithBoxes extracts text with bounding box information
     ExtractTextWithBoxes(ctx context.Context, img image.Image) (*DetailedResult, error)
-    
+
     // Close releases engine resources
     Close() error
 }
@@ -544,7 +544,7 @@ func (h *Handler) ExtractText(w http.ResponseWriter, r *http.Request) {
 
     result, err := h.engine.ExtractTextWithBoxes(ctx, img)
     if err != nil {
-        h.respondError(w, http.StatusInternalServerError, 
+        h.respondError(w, http.StatusInternalServerError,
             fmt.Sprintf("OCR failed: %v", err))
         return
     }
@@ -640,7 +640,7 @@ func (h *Handler) VisualizeBoxes(w http.ResponseWriter, r *http.Request) {
 
     result, err := h.engine.ExtractTextWithBoxes(ctx, img)
     if err != nil {
-        h.respondError(w, http.StatusInternalServerError, 
+        h.respondError(w, http.StatusInternalServerError,
             fmt.Sprintf("OCR failed: %v", err))
         return
     }
@@ -656,11 +656,11 @@ func (h *Handler) VisualizeBoxes(w http.ResponseWriter, r *http.Request) {
 
     for _, box := range result.Boxes {
         // Draw green rectangle
-        drawRect(rgba, box.Box.X, box.Box.Y, 
+        drawRect(rgba, box.Box.X, box.Box.Y,
             box.Box.X+box.Box.Width, box.Box.Y+box.Box.Height, green, 2)
 
         // Draw red text label
-        drawText(rgba, box.Box.X, max(box.Box.Y-15, 10), 
+        drawText(rgba, box.Box.X, max(box.Box.Y-15, 10),
             fmt.Sprintf("%s (%.2f)", box.Text, box.Confidence), red)
     }
 
@@ -1028,13 +1028,13 @@ mod: ## Download dependencies
 document.getElementById('extractForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
+
     try {
         const response = await fetch('/api/extract', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
         document.getElementById('result').innerHTML = `
             <h3>Resultado:</h3>
@@ -1053,13 +1053,13 @@ document.getElementById('extractForm').addEventListener('submit', async (e) => {
 document.getElementById('visualizeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
+
     try {
         const response = await fetch('/api/visualize', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
         document.getElementById('visualResult').innerHTML = `
             <h3>Imagen Procesada:</h3>
@@ -1077,15 +1077,15 @@ document.getElementById('visualizeForm').addEventListener('submit', async (e) =>
 document.getElementById('batchForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
+
     try {
         const response = await fetch('/api/batch', {
             method: 'POST',
             body: formData
         });
-        
+
         const data = await response.json();
-        
+
         let resultsHTML = `
             <h3>Resultados del Lote:</h3>
             <p><strong>Total:</strong> ${data.total_files}</p>
@@ -1103,7 +1103,7 @@ document.getElementById('batchForm').addEventListener('submit', async (e) => {
                 </thead>
                 <tbody>
         `;
-        
+
         data.results.forEach(result => {
             resultsHTML += `
                 <tr class="${result.success ? 'success' : 'error'}">
@@ -1114,12 +1114,12 @@ document.getElementById('batchForm').addEventListener('submit', async (e) => {
                 </tr>
             `;
         });
-        
+
         resultsHTML += `
                 </tbody>
             </table>
         `;
-        
+
         document.getElementById('batchResult').innerHTML = resultsHTML;
     } catch (error) {
         document.getElementById('batchResult').innerHTML = `
@@ -1324,11 +1324,11 @@ docs/
    - Exported identifiers: PascalCase
    - Unexported identifiers: camelCase
    - Interfaces: -er suffix (e.g., `Reader`, `Writer`)
-4. **Comments:** 
+4. **Comments:**
    - Document all exported functions, types, and packages
    - Use full sentences starting with the name being documented
 5. **Formatting:** Use `go fmt` and `goimports`
-6. **Concurrency:** 
+6. **Concurrency:**
    - Use channels and goroutines appropriately
    - Implement proper synchronization with `sync` package
    - Avoid goroutine leaks
@@ -1471,7 +1471,7 @@ func TestAPI_ExtractText(t *testing.T) {
 
     req, _ := http.NewRequest("POST", ts.URL+"/api/extract", body)
     req.Header.Set("Content-Type", writer.FormDataContentType())
-    
+
     resp, err := http.DefaultClient.Do(req)
     require.NoError(t, err)
     defer resp.Body.Close()
