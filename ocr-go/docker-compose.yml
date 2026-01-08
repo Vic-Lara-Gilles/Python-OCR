@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  ocr-go:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocr-go-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./uploads:/app/uploads
+    environment:
+      - APP_ENV=production
+      - PORT=8080
+      - LOG_LEVEL=info
+      - MAX_UPLOAD_SIZE=10485760
+      - TESSERACT_LANG=spa
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

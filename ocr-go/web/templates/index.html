@@ -1,0 +1,46 @@
+{{template "base" .}}
+
+{{define "title"}}OCR - Extraer Texto{{end}}
+
+{{define "content"}}
+<div class="container">
+  <section class="upload-section">
+    <h2>Extraer Texto</h2>
+    <p class="description">Sube una imagen para extraer el texto contenido en ella.</p>
+    <form id="extractForm" enctype="multipart/form-data">
+      <div class="file-input-wrapper">
+        <input type="file" name="file" accept="image/*" required>
+        <span class="file-label">Seleccionar imagen</span>
+      </div>
+      <button type="submit">Procesar</button>
+    </form>
+    <div id="result" class="result-container"></div>
+  </section>
+
+  <section class="visualize-section">
+    <h2>Visualizar Cajas</h2>
+    <p class="description">Genera una imagen con las cajas delimitadoras del texto detectado.</p>
+    <form id="visualizeForm" enctype="multipart/form-data">
+      <div class="file-input-wrapper">
+        <input type="file" name="file" accept="image/*" required>
+        <span class="file-label">Seleccionar imagen</span>
+      </div>
+      <button type="submit">Visualizar</button>
+    </form>
+    <div id="visualResult" class="result-container"></div>
+  </section>
+
+  <section class="batch-section">
+    <h2>Procesamiento por Lotes</h2>
+    <p class="description">Procesa multiples imagenes de manera concurrente.</p>
+    <form id="batchForm" enctype="multipart/form-data">
+      <div class="file-input-wrapper">
+        <input type="file" name="files" accept="image/*" multiple required>
+        <span class="file-label">Seleccionar imagenes</span>
+      </div>
+      <button type="submit">Procesar Todo</button>
+    </form>
+    <div id="batchResult" class="result-container"></div>
+  </section>
+</div>
+{{end}}

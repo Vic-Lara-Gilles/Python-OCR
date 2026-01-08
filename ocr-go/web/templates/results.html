@@ -1,0 +1,50 @@
+{{template "base" .}}
+
+{{define "title"}}OCR - Resultados{{end}}
+
+{{define "content"}}
+<div class="container">
+  <section class="results-section">
+    <h2>Resultados Guardados</h2>
+    <p class="description">Lista de todos los archivos de resultados generados.</p>
+    <div id="resultsList" class="results-list">
+      <p class="loading">Cargando resultados...</p>
+    </div>
+  </section>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const response = await fetch('/api/results');
+      const data = await response.json();
+
+      const container = document.getElementById('resultsList');
+
+      if (data.files && data.files.length > 0) {
+        let html = '<table><thead><tr><th>Archivo</th><th>Tamano</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>';
+
+        data.files.forEach(file => {
+          const size = (file.size / 1024).toFixed(2) + ' KB';
+          const date = new Date(file.modified).toLocaleString('es-ES');
+          html += `
+                        <tr>
+                            <td>${file.name}</td>
+                            <td>${size}</td>
+                            <td>${date}</td>
+                            <td><a href="/api/results/${file.name}" download class="btn-download">Descargar</a></td>
+                        </tr>
+                    `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } else {
+        container.innerHTML = '<p class="no-results">No hay resultados guardados.</p>';
+      }
+    } catch (error) {
+      document.getElementById('resultsList').innerHTML = `<p class="error">Error al cargar resultados: ${error.message}</p>`;
+    }
+  });
+</script>
+{{end}}

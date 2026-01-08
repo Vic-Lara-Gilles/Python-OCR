@@ -1,0 +1,33 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{block "title" .}}OCR System{{end}}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+  <header>
+    <h1>OCR System - Go + Tesseract</h1>
+    <nav>
+      <a href="/">Inicio</a>
+      <a href="/api/results">Resultados</a>
+    </nav>
+  </header>
+
+  <main>
+    {{block "content" .}}{{end}}
+  </main>
+
+  <footer>
+    <p>Powered by Go 1.21 + Tesseract OCR</p>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+
+</html>
+{{end}}
