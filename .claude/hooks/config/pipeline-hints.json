@@ -1,0 +1,53 @@
+{
+  "$comment": "Path patterns to the follow-up step that editing them makes necessary. Read by hooks/scripts/pipeline-hint.mjs. Patterns are JavaScript regular expressions tested against the edited file path; the first match wins, so order from most specific to least.",
+  "rules": [
+    {
+      "pattern": "src/ocr/config\\.py$",
+      "hint": "Edited the settings model. Three copies of this list have to agree: the fields here, the variables in `.env.example`, and the environment table in README.md. `tests/test_config.py` covers the defaults and the fallback on unparsable values, not the documentation — nothing checks that, so update both by hand."
+    },
+    {
+      "pattern": "src/ocr/engine\\.py$",
+      "hint": "Edited the OCR core. It must not import `streamlit` — that invariant is what lets the CLI and the tests use it, and it was broken once before by a cache decorator. Detection filtering lives in `_iter_detections` and is shared by extraction and annotation, so a change there moves both. The Go service implements the same rules separately: consider whether `ocr-go/internal/ocr/tesseract.go` needs the same change."
+    },
+    {
+      "pattern": "src/ocr/app\\.py$",
+      "hint": "Edited the Streamlit UI. UI strings are Spanish, code and comments English. Anything written under OUTPUT_DIR goes through `safe_stem()` first — upload names are attacker-controlled. `tests/test_app_helpers.py` covers the sanitizing."
+    },
+    {
+      "pattern": "ocr-go/internal/ocr/tesseract\\.go$",
+      "hint": "Edited the Go OCR engine. `gosseract.Client` is not safe for concurrent use: every request must take a client from the pool via `acquire`/`release` and never share one across goroutines. Verify with `go test -race ./...`, which is the only thing that catches a regression here."
+    },
+    {
+      "pattern": "ocr-go/internal/model/.+\\.go$",
+      "hint": "Edited the transport structs. The JSON tags here are the public API shape, and `web/static/js/app.js` reads `total_lines`, `full_text`, `total_boxes` and `download_url` by name. Renaming a tag breaks the frontend silently — no test covers that pair."
+    },
+    {
+      "pattern": "ocr-go/internal/handler/.+\\.go$",
+      "hint": "Edited a handler. Any path derived from a request goes through `Handler.resolveOutputPath`, and any upload through `parseUpload` (`ParseMultipartForm` alone bounds only in-memory buffering, not body size). Tunables come from `h.cfg`, never `os.Getenv`. Run `go test ./internal/handler`."
+    },
+    {
+      "pattern": "ocr-go/go\\.mod$",
+      "hint": "Edited the Go module. `go.sum` is not committed, so run `go mod tidy` before building or the gates will report themselves skipped."
+    },
+    {
+      "pattern": "requirements(-dev)?\\.txt$",
+      "hint": "Edited the pinned dependencies. `pyproject.toml` carries its own `dependencies` list for the packaged wheel; the two are separate files with no check between them. Update both or say why they differ."
+    },
+    {
+      "pattern": "(^|/)Dockerfile$",
+      "hint": "Edited a Dockerfile. The Python image has three stages — `base`, `dev`, `runtime` — and `make test-docker` builds `dev` while compose builds `runtime`; a change to `base` moves both. Nothing in the gates builds an image, so verify by building it."
+    },
+    {
+      "pattern": "\\.githooks/.+$",
+      "hint": "Edited a git hook. `core.hooksPath` is per-clone and not carried by git, so the change only takes effect after `make hooks` — and never for anyone who has not run it. Test it by piping a message into the script directly rather than by making a throwaway commit."
+    },
+    {
+      "pattern": "(^|/)CHANGELOG\\.md$",
+      "hint": "Edited the changelog. The entry rides in the same commit as the change it describes, never its own — that is the one deliberate exception to committing by concern. Only user-visible and architectural changes belong here; internal churn does not. Never add a version heading outside an authorized release."
+    },
+    {
+      "pattern": "\\.github/workflows/.+\\.ya?ml$",
+      "hint": "Edited CI. The Go job runs `go mod tidy` before vetting because `go.sum` is not committed, and the Python job installs the Tesseract binary so the OCR tests do not skip themselves. Both are load-bearing."
+    }
+  ]
+}
