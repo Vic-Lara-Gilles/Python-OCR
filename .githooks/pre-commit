@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# Runs before every commit. Holds only the fast, per-commit invariants.
+#
+# It deliberately does NOT run lint, tests or the OCR suite. Those belong to
+# `.claude/scripts/commit.sh verify`, which runs once per session on the whole
+# working tree. Running them here would be wrong twice over: they are slow
+# enough to discourage small commits, and a run that splits one file across two
+# commits would have them fire against a half-trimmed tree.
+#
+# Install with: make hooks
+
+set -uo pipefail
+
+fail() {
+    printf '\npre-commit: %s\n\n' "$1" >&2
+    exit 1
+}
+
+# --- Daily commit budget --------------------------------------------------
+#
+# History is read by people, and sixty commits in a day is past what anyone
+# reviews. The ceiling is a prompt to group related work, not a quota to spend.
+
+DAILY_LIMIT=60
+DAILY_WARN=50
+
+spent=$(git log --branches --since=midnight --oneline 2>/dev/null | wc -l | tr -d ' ')
+
+if [ "$spent" -ge "$DAILY_LIMIT" ]; then
+    fail "daily commit budget exhausted ($spent of $DAILY_LIMIT).
+  Group related changes into fewer commits, or continue tomorrow.
+  To override for a genuine reason, commit from your own shell with --no-verify."
+fi
+
+if [ "$spent" -ge "$DAILY_WARN" ]; then
+    printf 'pre-commit: %s of %s commits used today.\n' "$spent" "$DAILY_LIMIT" >&2
+fi
+
+# --- Files that must never be committed -----------------------------------
+#
+# Checked against the index, not the working tree: what matters is what this
+# commit would carry.
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+forbidden=$(printf '%s\n' "$staged" | grep -E '(^|/)\.env$|(^|/)\.env\.[^/]+$|^outputs/|(^|/)__pycache__/' | grep -v '\.env\.example$')
+
+if [ -n "$forbidden" ]; then
+    fail "these files must never be committed:
+$(printf '%s\n' "$forbidden" | sed 's/^/    /')
+  Unstage them with: git restore --staged <file>"
+fi
+
+# --- Large files ----------------------------------------------------------
+#
+# OCR output and scanned documents are the plausible accident here: they land in
+# the working tree during normal use and are easy to `git add .` by mistake.
+
+while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    size=$(wc -c <"$file" 2>/dev/null || echo 0)
+    if [ "$size" -gt 5242880 ]; then
+        fail "$file is $((size / 1048576)) MB.
+  Files this large are almost always OCR output or a scanned document.
+  If it genuinely belongs in the repository, commit it from your own shell."
+    fi
+done <<<"$staged"
+
+exit 0
