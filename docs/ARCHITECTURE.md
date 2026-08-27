@@ -288,17 +288,19 @@ def extract_text_from_pdf(pdf_path: str) -> Dict[str, Any]:
     return combined_result
 ```
 
-### 5. Singleton Pattern (via Caching)
+### 5. Context Manager Pattern
 
-**Problem**: Tesseract configuration should be initialized once
+**Problem**: Rasterized PDF pages and staged uploads leak when processing
+fails halfway through.
 
-**Solution**: Streamlit caching acts as singleton
+**Solution**: Ownership of temporary files lives in a context manager, so
+cleanup runs on both the happy path and the error path.
 
 ```python
-@st.cache_data
-def configure_tesseract() -> None:
-    # Called once, result cached
-    pass
+with OCREngine.rasterized_pdf(pdf_path) as pages:
+    for page in pages:
+        OCREngine.extract_text_and_boxes(page)
+# Temporary page images are removed here, exception or not
 ```
 
 ## SOLID Principles Implementation
@@ -467,19 +469,23 @@ tests/
 
 ## Performance Considerations
 
-### Caching Strategy
+### Single OCR Pass
+
+Annotating an image used to decode it twice (OpenCV plus Pillow) and run
+Tesseract a second time. `visualize_boxes` now decodes once and reuses the
+detections it already has:
 
 ```python
-@st.cache_data
-def configure_tesseract() -> None:
-    """Cached across Streamlit reruns."""
-    pass
+image = OCREngine._load_image(image_path)
+data = OCREngine._run_tesseract(image, language)
 
-@st.cache_data
-def extract_text_and_boxes(image_path: str) -> Dict[str, Any]:
-    """Results cached by image path."""
-    pass
+canvas = np.array(image)
+for detection in OCREngine._iter_detections(data, threshold):
+    OCREngine._draw_detection(canvas, detection)
 ```
+
+Caching OCR results by path is deliberately avoided: the engine is stateless
+and callers decide what is worth keeping.
 
 ### Resource Management
 

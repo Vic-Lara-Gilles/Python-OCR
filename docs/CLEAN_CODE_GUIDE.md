@@ -123,7 +123,6 @@ lang = "spa"                   # Too short
 ```python
 def extract_text_and_boxes(image_path: str) -> Dict[str, Any]:
     """Only extracts text and boxes - nothing else."""
-    OCREngine.configure_tesseract()
     image = Image.open(image_path)
     data = pytesseract.image_to_data(image, lang="spa", output_type=pytesseract.Output.DICT)
 
@@ -185,7 +184,6 @@ def extract_and_save_and_visualize_and_format(image_path: str, output_path: str,
 ```python
 def visualize_boxes(image_path: str, output_path: str) -> str:
     """Short, focused function."""
-    OCREngine.configure_tesseract()
 
     image = _load_and_convert_image(image_path)
     data = _get_ocr_data(image_path)

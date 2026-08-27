@@ -50,7 +50,7 @@ Python-OCR es un sistema de reconocimiento optico de caracteres (OCR) moderno y 
 ├─────────────────────────────────────────────────────┤
 │                  BUSINESS LOGIC                      │
 │                 (OCR Engine Core)                    │
-│              src/ocr/engine.py                       │
+│         src/ocr/engine.py + src/ocr/config.py        │
 │   ┌──────────────┬──────────────┬──────────────┐   │
 │   │   Extract    │  Visualize   │   Format     │   │
 │   │   Methods    │   Methods    │   Methods    │   │
@@ -98,7 +98,7 @@ class OCREngine:
 **Beneficios**:
 - No requiere instancia de clase
 - Simplifica el API
-- Cacheo eficiente con `@st.cache_data`
+- Sin estado compartido entre invocaciones
 
 ### 2. Facade Pattern
 **Ubicacion**: `OCREngine` class
@@ -147,15 +147,16 @@ def extract_text_from_pdf(pdf_path: str) -> Dict[str, Any]:
     return aggregated_result
 ```
 
-### 5. Caching Pattern
-**Ubicacion**: Streamlit decorators
-**Proposito**: Optimizar rendimiento cacheando configuracion de Tesseract.
+### 5. Context Manager Pattern
+**Ubicacion**: `OCREngine.rasterized_pdf`, `app.staged_upload`
+**Proposito**: Garantizar la limpieza de archivos temporales aunque el
+procesamiento falle a mitad.
 
 ```python
-@st.cache_data
-def configure_tesseract() -> None:
-    # Configuration cached across reruns
-    pass
+with OCREngine.rasterized_pdf(pdf_path) as pages:
+    for page in pages:
+        OCREngine.extract_text_and_boxes(page)
+# Las imagenes temporales se borran aqui, incluso ante una excepcion
 ```
 
 ## Principios SOLID
@@ -233,20 +234,26 @@ python-ocr/
 ├── src/
 │   └── ocr/
 │       ├── __init__.py
-│       ├── engine.py          # Motor OCR con Tesseract
-│       └── app.py             # Aplicacion Streamlit
+│       ├── config.py          # Configuracion desde variables de entorno
+│       ├── engine.py          # Motor OCR con Tesseract (sin dependencias de UI)
+│       ├── app.py             # Aplicacion Streamlit
+│       └── cli.py             # Entry point `ocr-app`
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py            # Fixtures de pytest
-│   └── test_engine.py         # Tests unitarios
+│   ├── test_config.py         # Configuracion
+│   ├── test_detections.py     # Parseo de datos de Tesseract (sin binario)
+│   ├── test_app_helpers.py    # Saneado de nombres de subida
+│   └── test_engine.py         # Motor OCR
 ├── docs/
 │   ├── ARCHITECTURE.md        # Documentacion arquitectura
 │   ├── CLEAN_CODE_GUIDE.md    # Guia Clean Code
 │   └── MACOS_SETUP.md         # Setup local macOS
 ├── outputs/                   # Resultados OCR (ignorado por git)
-├── uploads/                   # Archivos temporales
-├── Dockerfile
+├── .github/workflows/ci.yml   # Lint, tipos, tests y build de imagenes
+├── Dockerfile                 # Multi-stage: base / dev / runtime
 ├── docker-compose.yml
+├── docker-compose.dev.yml     # Overrides de desarrollo (hot reload)
 ├── Makefile                   # Comandos de desarrollo
 ├── requirements.txt
 ├── requirements-dev.txt
@@ -320,7 +327,8 @@ docker-compose down && docker-compose build --no-cache && docker-compose up
 - Imagen base: `python:3.11-slim`
 - Sistema: Tesseract-OCR + español
 - Puerto: 8501
-- Volúmenes: outputs, uploads, src (hot reload)
+- Volumen: outputs (los temporales viven en `tempfile`, no en el proyecto)
+- Usuario no privilegiado (`appuser`)
 
 ### Python
 - **Streamlit 1.39.0** - Interfaz web
@@ -345,8 +353,20 @@ El proyecto implementa **Test-Driven Development (TDD)** con pytest.
 ```
 tests/
 ├── __init__.py
-├── conftest.py           # Fixtures compartidos
-└── test_engine.py        # Tests unitarios del motor OCR
+├── conftest.py           # Fixtures compartidos + marca requires_tesseract
+├── test_config.py        # Configuracion desde el entorno
+├── test_detections.py    # Parseo de detecciones, sin invocar Tesseract
+├── test_app_helpers.py   # Saneado de nombres y previews
+└── test_engine.py        # Motor OCR end to end
+```
+
+Los tests que necesitan el binario de Tesseract llevan la marca
+`@requires_tesseract` y se saltan solos si no está instalado, de modo que
+`pytest` sigue siendo útil en una máquina sin OCR. Para ejecutar la suite
+completa:
+
+```bash
+make test-docker
 ```
 
 #### Cobertura de Tests
@@ -442,12 +462,11 @@ def extract_text_and_boxes(image_path: str) -> Dict[str, Any]:
 #### 5. Error Handling
 ```python
 try:
-    result = OCREngine.extract_text_and_boxes(temp_path)
-except Exception as e:
-    st.error(f"Error al procesar la imagen: {str(e)}")
-finally:
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
+    with staged_upload(uploaded_file) as staged:
+        result = OCREngine.extract_document(str(staged))
+except OCRError as exc:
+    st.error(f"Error al procesar el documento: {exc}")
+# staged_upload borra el directorio temporal al salir del bloque
 ```
 
 ## Desarrollo
@@ -727,7 +746,7 @@ Elegimos Streamlit para la interfaz web.
 - **Python puro**: Sin JavaScript, HTML o CSS
 - **Hot reload**: Desarrollo iterativo rapido
 - **Widgets built-in**: File upload, downloads, progress bars
-- **Caching**: `@st.cache_data` optimiza performance
+- **Widgets de estado**: progress bars y spinners sin codigo extra
 - **Deployment**: Facil deploy con Docker
 
 **Consecuencias**:
@@ -770,10 +789,14 @@ Arquitectura 100% dockerizada sin instalacion local requerida.
 
 **Implementacion**:
 ```yaml
+# docker-compose.yml (produccion)
 volumes:
-  - ./src:/app/src          # Hot reload codigo
-  - ./outputs:/app/outputs  # Persistencia resultados
-  - ./uploads:/app/uploads  # Archivos temporales
+  - ./outputs:/app/outputs  # Persistencia de resultados
+
+# docker-compose.dev.yml (desarrollo)
+volumes:
+  - ./src:/app/src          # Hot reload de codigo
+  - ./tests:/app/tests
 ```
 
 ---
@@ -792,7 +815,7 @@ Usar metodos estaticos (`@staticmethod`) en clase `OCREngine`.
 **Razones**:
 - **Stateless**: OCR no requiere estado interno
 - **Simplicidad**: No necesita `__init__` ni manejo de instancias
-- **Caching**: `@st.cache_data` funciona mejor con funciones stateless
+- **Reutilizacion**: el motor se puede usar desde la UI, la CLI o los tests
 - **Testing**: Tests mas simples sin setup de instancias
 - **API limpia**: `OCREngine.extract_text()` mas claro que `engine.extract_text()`
 
@@ -903,19 +926,35 @@ class TestOCREngineExtraction:
 ```yaml
 volumes:
   - ./outputs:/app/outputs    # Resultados persistentes
-  - ./uploads:/app/uploads    # Archivos temporales
-  - ./src:/app/src            # Hot reload código
+```
+
+En desarrollo, `docker-compose.dev.yml` añade el montaje de `./src` y `./tests`
+para tener hot reload:
+
+```bash
+make dev
 ```
 
 Los resultados OCR se guardan en `./outputs/` y persisten tras detener el contenedor.
 
 ### Variables de Entorno
 
-```yaml
-environment:
-  - PYTHONUNBUFFERED=1      # Logs en tiempo real
-  - PYTHONPATH=/app/src     # Import path
-```
+Toda la configuración se lee del entorno en `src/ocr/config.py`. Copia
+`.env.example` a `.env` y ajusta lo que necesites; `docker compose` lo carga
+automáticamente.
+
+| Variable | Por defecto | Descripción |
+|----------|-------------|-------------|
+| `OCR_LANG` | `spa` | Código de idioma de Tesseract. Combinable con `+` (p. ej. `spa+eng`) |
+| `OCR_PDF_ZOOM` | `2` | Factor de escala al rasterizar páginas PDF. Más alto mejora precisión y consume más memoria |
+| `OCR_MIN_CONFIDENCE` | `0` | Descarta detecciones por debajo de esta confianza (rango 0-1) |
+| `MAX_UPLOAD_SIZE_MB` | `25` | Tamaño máximo aceptado por archivo |
+| `OUTPUT_DIR` | `outputs` | Directorio donde se escriben JSON, Markdown, texto e imágenes anotadas |
+| `STREAMLIT_SERVER_PORT` | `8501` | Puerto publicado por Docker |
+| `LOG_LEVEL` | `INFO` | Nivel del logger (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+
+Variables internas de la imagen (`PYTHONUNBUFFERED`, `PYTHONPATH`) ya vienen
+definidas en el `Dockerfile` y no hace falta tocarlas.
 
 ### Healthcheck
 
@@ -961,13 +1000,9 @@ services:
 
 ### Performance Optimizations
 
-#### 1. Caching Strategy
-```python
-@st.cache_data
-def configure_tesseract() -> None:
-    """Configuration cached across reruns."""
-    pass
-```
+#### 1. Un solo paso de OCR
+`visualize_boxes` decodifica la imagen y ejecuta Tesseract una unica vez,
+reutilizando las detecciones para dibujar las cajas.
 
 #### 2. Batch Processing
 - Procesamiento paralelo de multiples imagenes
@@ -976,12 +1011,8 @@ def configure_tesseract() -> None:
 
 #### 3. Resource Management
 ```python
-try:
-    result = OCREngine.extract_text_and_boxes(temp_path)
-finally:
-    # Cleanup temporal files
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
+with OCREngine.rasterized_pdf(pdf_path) as pages:
+    ...  # Las paginas rasterizadas se borran al salir del bloque
 ```
 
 ### Security Considerations
@@ -992,12 +1023,17 @@ finally:
 type=["jpg", "jpeg", "png", "webp", "pdf"]
 ```
 
-#### 2. Temporary Files
-- Archivos temporales con nombres unicos
-- Cleanup automatico despues de procesamiento
-- Directorio `uploads/` ignorado por git
+#### 2. Nombres de archivo saneados
+Los nombres de subida son controlados por el usuario. `safe_stem()` elimina
+componentes de ruta y caracteres inusuales antes de escribir en `outputs/`,
+de modo que `../../etc/passwd` no puede escapar del directorio de salida.
 
-#### 3. No Sensitive Data
+#### 3. Archivos temporales
+- Se escriben en un directorio temporal privado, nunca en el proyecto
+- Cleanup automatico via context manager, incluso ante excepciones
+- Limite de tamano configurable con `MAX_UPLOAD_SIZE_MB`
+
+#### 4. No Sensitive Data
 - `.env` en `.gitignore`
 - No hardcoded secrets
 - Environment variables para configuracion sensible
@@ -1106,7 +1142,7 @@ docker-compose up --build
 ```bash
 # Verificar permisos
 ls -la outputs/
-chmod 777 outputs/ uploads/
+chmod u+rwx outputs/
 ```
 
 ### Error de dependencias
