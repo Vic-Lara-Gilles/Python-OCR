@@ -1,0 +1,22 @@
+# Development overrides: hot reload from the host source tree.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  ocr-app:
+    build:
+      target: dev
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./outputs:/app/outputs
+    environment:
+      LOG_LEVEL: DEBUG
+    entrypoint:
+      - streamlit
+      - run
+      - src/ocr/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --server.headless=true
+      - --server.runOnSave=true
+      - --browser.gatherUsageStats=false
+    restart: "no"

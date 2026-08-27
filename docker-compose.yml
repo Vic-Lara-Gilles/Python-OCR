@@ -3,14 +3,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
+    image: python-ocr:latest
     container_name: ocr-mvp-streamlit
     ports:
-      - "8501:8501"
+      - "${STREAMLIT_SERVER_PORT:-8501}:8501"
     volumes:
       - ./outputs:/app/outputs
-      - ./uploads:/app/uploads
-      - ./src:/app/src
     environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app/src
+      OCR_LANG: ${OCR_LANG:-spa}
+      OCR_PDF_ZOOM: ${OCR_PDF_ZOOM:-2}
+      OCR_MIN_CONFIDENCE: ${OCR_MIN_CONFIDENCE:-0}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-25}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     restart: unless-stopped

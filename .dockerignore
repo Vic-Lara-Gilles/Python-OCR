@@ -1,9 +1,38 @@
-__pycache__
-*.pyc
+# Version control and tooling
 .git
-.env
-.vscode
-.DS_Store
-venv
+.github
+.gitignore
+.claude
+
+# Python artifacts
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+build
+dist
+
+# Environments
 .venv
+venv
+.env
+
+# Runtime output
+outputs
+uploads
 temp_*
+
+# Docs and unrelated services
+docs
+ocr-go
+*.md
+!README.md
+
+# Editors and OS
+.vscode
+.idea
+.DS_Store
