@@ -1,41 +1,68 @@
-.PHONY: help start stop build rebuild logs clean dev test lint format
+.PHONY: help start stop build rebuild logs clean dev shell status \
+        install hooks test test-docker lint format typecheck check
+
+COMPOSE ?= docker compose
+DEV_COMPOSE := $(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml
+PYTHON ?= python3
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-start: ## Start the OCR application with Docker
-	docker-compose up -d
+## --- Docker ---------------------------------------------------------------
+
+start: ## Start the OCR application in the background
+	$(COMPOSE) up -d
 
 stop: ## Stop the OCR application
-	docker-compose down
+	$(COMPOSE) down
 
-build: ## Build the Docker image
-	docker-compose build
+build: ## Build the runtime image
+	$(COMPOSE) build
 
-rebuild: ## Rebuild and start the application
-	docker-compose up --build -d
+rebuild: ## Rebuild and restart the application
+	$(COMPOSE) up --build -d
 
-logs: ## Show application logs
-	docker-compose logs -f
+dev: ## Start in development mode with hot reload (attached)
+	$(DEV_COMPOSE) up --build
 
-clean: ## Stop containers and clean outputs
-	docker-compose down
-	rm -rf outputs/* uploads/*
-
-dev: ## Start in development mode (attached)
-	docker-compose up --build
-
-test: ## Run tests
-	docker-compose exec ocr-app pytest tests/ -v
-
-lint: ## Run linter
-	docker-compose exec ocr-app ruff check src/
-
-format: ## Format code
-	docker-compose exec ocr-app ruff format src/
-
-shell: ## Open shell in container
-	docker-compose exec ocr-app /bin/bash
+logs: ## Follow application logs
+	$(COMPOSE) logs -f
 
 status: ## Show container status
-	docker-compose ps
+	$(COMPOSE) ps
+
+shell: ## Open a shell inside the running container
+	$(COMPOSE) exec ocr-app /bin/bash
+
+clean: ## Stop containers and remove generated output
+	$(COMPOSE) down
+	rm -rf outputs/*
+
+## --- Local development ----------------------------------------------------
+
+install: ## Install runtime and development dependencies locally
+	$(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
+
+hooks: ## Install the git hooks in .githooks
+	git config core.hooksPath .githooks
+	@echo "git hooks installed: $$(ls .githooks | tr '\n' ' ')"
+
+test: ## Run the test suite locally
+	$(PYTHON) -m pytest tests/ --cov=src/ocr --cov-report=term-missing
+
+test-docker: ## Run the test suite inside the dev image (includes Tesseract)
+	docker build --target dev -t python-ocr:dev .
+	docker run --rm python-ocr:dev pytest tests/
+
+lint: ## Check formatting and lint rules
+	$(PYTHON) -m ruff check src/ tests/
+	$(PYTHON) -m black --check src/ tests/
+
+format: ## Auto-format the code base
+	$(PYTHON) -m black src/ tests/
+	$(PYTHON) -m ruff check --fix src/ tests/
+
+typecheck: ## Run static type checking
+	$(PYTHON) -m mypy src/ocr
+
+check: lint typecheck test ## Run every quality gate

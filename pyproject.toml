@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "python-ocr"
-version = "1.0.0"
-description = "Fast OCR system for document recognition with PDF support (Tesseract/PaddleOCR)"
+version = "1.1.0"
+description = "OCR system for document and PDF text recognition, powered by Tesseract"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 authors = [
     { name = "Developer" }
 ]
-keywords = ["ocr", "tesseract", "paddleocr", "document-recognition", "streamlit", "docker"]
+keywords = ["ocr", "tesseract", "pdf", "document-recognition", "streamlit", "docker"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -53,7 +53,7 @@ dev = [
 "Documentation" = "https://github.com/username/python-ocr#readme"
 
 [project.scripts]
-ocr-app = "ocr.app:main"
+ocr-app = "ocr.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ocr"]
@@ -68,6 +68,7 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -75,6 +76,7 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
+    "--strict-config",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -111,6 +113,16 @@ extend-exclude = '''
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    "outputs",
+    "uploads",
+]
+
+[tool.ruff.lint]
 select = [
     "E",      # pycodestyle errors
     "W",      # pycodestyle warnings
@@ -124,16 +136,8 @@ ignore = [
     "E501",   # line too long (handled by black)
     "B008",   # do not perform function calls in argument defaults
 ]
-exclude = [
-    ".git",
-    ".venv",
-    "build",
-    "dist",
-    "outputs",
-    "uploads",
-]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
 [tool.mypy]
