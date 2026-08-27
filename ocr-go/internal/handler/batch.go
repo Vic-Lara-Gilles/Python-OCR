@@ -2,30 +2,25 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/username/ocr-go/internal/model"
 )
 
-// BatchProcess handles batch processing of multiple files
+// previewRunes is how much of the extracted text is echoed back per file.
+const previewRunes = 100
+
+// BatchProcess handles OCR over several uploaded files.
 func (h *Handler) BatchProcess(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 
-	// Parse multipart form (50MB max for batch)
-	if err := r.ParseMultipartForm(50 << 20); err != nil {
-		h.respondError(w, http.StatusBadRequest, "Failed to parse form")
+	if err := parseUpload(w, r, h.cfg.MaxBatchBytes); err != nil {
+		h.respondUploadError(w, err, h.cfg.MaxBatchBytes)
 		return
 	}
 
@@ -35,66 +30,71 @@ func (h *Handler) BatchProcess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Process files concurrently
+	results := h.processFiles(r.Context(), files)
+
+	successCount := 0
+	for _, result := range results {
+		if result.Success {
+			successCount++
+		}
+	}
+
+	h.respondJSON(w, http.StatusOK, model.BatchProcessResponse{
+		TotalFiles:     len(files),
+		SuccessCount:   successCount,
+		FailureCount:   len(files) - successCount,
+		Results:        results,
+		ProcessingTime: time.Since(startTime).String(),
+	})
+}
+
+// processFiles runs OCR over every file, bounded by BatchConcurrency.
+//
+// Each goroutine writes to its own slot, so no lock is needed around results.
+func (h *Handler) processFiles(
+	ctx context.Context,
+	files []*multipart.FileHeader,
+) []model.BatchResult {
+	concurrency := h.cfg.BatchConcurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
 	results := make([]model.BatchResult, len(files))
+	semaphore := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 4) // Limit to 4 concurrent processes
 
 	for i, fileHeader := range files {
 		wg.Add(1)
+
 		go func(index int, header *multipart.FileHeader) {
 			defer wg.Done()
+
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			results[index] = h.processFile(r.Context(), header)
+			results[index] = h.processFile(ctx, header)
 		}(i, fileHeader)
 	}
 
 	wg.Wait()
-
-	// Count successes and failures
-	successCount := 0
-	failureCount := 0
-	for _, result := range results {
-		if result.Success {
-			successCount++
-		} else {
-			failureCount++
-		}
-	}
-
-	response := model.BatchProcessResponse{
-		TotalFiles:     len(files),
-		SuccessCount:   successCount,
-		FailureCount:   failureCount,
-		Results:        results,
-		ProcessingTime: time.Since(startTime).String(),
-	}
-
-	h.respondJSON(w, http.StatusOK, response)
+	return results
 }
 
-// processFile processes a single file for batch processing
-func (h *Handler) processFile(ctx context.Context, header *multipart.FileHeader) model.BatchResult {
-	result := model.BatchResult{
-		Filename: header.Filename,
-	}
+// processFile runs OCR over a single uploaded file.
+func (h *Handler) processFile(
+	ctx context.Context,
+	header *multipart.FileHeader,
+) model.BatchResult {
+	result := model.BatchResult{Filename: header.Filename}
 
-	file, err := header.Open()
+	img, err := decodeImage(header)
 	if err != nil {
-		result.Error = fmt.Sprintf("Failed to open file: %v", err)
-		return result
-	}
-	defer file.Close()
-
-	img, _, err := image.Decode(file)
-	if err != nil {
-		result.Error = fmt.Sprintf("Invalid image: %v", err)
+		result.Error = err.Error()
 		return result
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, h.cfg.OCRTimeout)
 	defer cancel()
 
 	ocrResult, err := h.engine.ExtractTextWithBoxes(ctx, img)
@@ -104,30 +104,33 @@ func (h *Handler) processFile(ctx context.Context, header *multipart.FileHeader)
 	}
 
 	result.Lines = ocrResult.TotalLines
+	result.Preview = preview(ocrResult.FullText, previewRunes)
 	result.Success = true
 
-	// Create preview (first 100 characters)
-	if len(ocrResult.FullText) > 100 {
-		result.Preview = ocrResult.FullText[:100] + "..."
-	} else {
-		result.Preview = ocrResult.FullText
+	payload := map[string]interface{}{
+		"filename":    header.Filename,
+		"full_text":   ocrResult.FullText,
+		"boxes":       ocrResult.Boxes,
+		"total_lines": ocrResult.TotalLines,
 	}
 
-	// Save result to file
-	resultID := uuid.Must(uuid.NewV4()).String()
-	outputPath := filepath.Join("outputs", fmt.Sprintf("ocr_%s.json", resultID))
-
-	outputFile, err := os.Create(outputPath)
-	if err == nil {
-		defer outputFile.Close()
-		json.NewEncoder(outputFile).Encode(map[string]interface{}{
-			"filename":    header.Filename,
-			"full_text":   ocrResult.FullText,
-			"boxes":       ocrResult.Boxes,
-			"total_lines": ocrResult.TotalLines,
-		})
-		result.OutputFile = filepath.Base(outputPath)
+	if name, err := h.saveJSONResult(payload); err != nil {
+		log.Printf("failed to persist result for %q: %v", header.Filename, err)
+	} else {
+		result.OutputFile = name
 	}
 
 	return result
+}
+
+// preview truncates text to at most limit runes.
+//
+// Slicing by bytes would split multi-byte characters, which is common in
+// Spanish text and yields invalid UTF-8 in the JSON response.
+func preview(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit]) + "..."
 }

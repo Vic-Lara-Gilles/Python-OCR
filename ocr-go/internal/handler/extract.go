@@ -2,46 +2,22 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/username/ocr-go/internal/model"
 )
 
-// ExtractText handles text extraction from uploaded image
+// ExtractText handles text extraction from an uploaded image.
 func (h *Handler) ExtractText(w http.ResponseWriter, r *http.Request) {
-	// Parse multipart form (10MB max)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		h.respondError(w, http.StatusBadRequest, "Failed to parse form")
+	img, header, ok := h.decodeImageUpload(w, r, "file")
+	if !ok {
 		return
 	}
 
-	// Get uploaded file
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		h.respondError(w, http.StatusBadRequest, "No file uploaded")
-		return
-	}
-	defer file.Close()
-
-	// Decode image
-	img, _, err := image.Decode(file)
-	if err != nil {
-		h.respondError(w, http.StatusBadRequest, "Invalid image file")
-		return
-	}
-
-	// Extract text with boxes
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.cfg.OCRTimeout)
 	defer cancel()
 
 	result, err := h.engine.ExtractTextWithBoxes(ctx, img)
@@ -51,40 +27,21 @@ func (h *Handler) ExtractText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert boxes to map format
-	boxes := make([]map[string]interface{}, len(result.Boxes))
-	for i, box := range result.Boxes {
-		boxes[i] = map[string]interface{}{
-			"text":       box.Text,
-			"confidence": box.Confidence,
-			"bbox": map[string]int{
-				"x":      box.Box.X,
-				"y":      box.Box.Y,
-				"width":  box.Box.Width,
-				"height": box.Box.Height,
-			},
-		}
-	}
-
-	// Build response
 	response := model.ExtractTextResponse{
 		Filename:    header.Filename,
 		FullText:    result.FullText,
-		Boxes:       boxes,
+		Boxes:       result.Boxes,
 		TotalLines:  result.TotalLines,
-		ProcessedAt: time.Now(),
+		ProcessedAt: time.Now().UTC(),
 	}
 
-	// Save result to file
-	resultID := uuid.Must(uuid.NewV4()).String()
-	outputPath := filepath.Join("outputs", fmt.Sprintf("ocr_%s.json", resultID))
-
-	outputFile, err := os.Create(outputPath)
-	if err == nil {
-		defer outputFile.Close()
-		json.NewEncoder(outputFile).Encode(response)
+	// A failure to persist the result must not fail the request: the caller
+	// already has the payload in the response body.
+	if name, err := h.saveJSONResult(response); err != nil {
+		log.Printf("failed to persist result for %q: %v", header.Filename, err)
+	} else {
+		response.OutputFile = name
 	}
 
-	// Send response
 	h.respondJSON(w, http.StatusOK, response)
 }
